@@ -30,12 +30,23 @@ python scripts/run_pipeline.py --mode live --symbol BTCUSDT --n 500
 pytest
 ```
 
-## 学习点
+## 学习点（先看问题自己答，再对答案）
 
-1. 为什么时间戳用 int 纳秒、schema 固定？（见 schema.py 注释）
-2. 为什么落 Parquet 不落 CSV？（见 sink.py 注释）
+1. 为什么时间戳用 int 纳秒、schema 固定？
+
+   **答案**：不同数据源的时间精度和时区各不同（秒/毫秒/带时区字符串），统一成 int 纳秒就消灭了歧义；定长整数在列式存储里对齐整齐、压缩友好、比较排序快。schema 固定意味着下游 Parquet 和 SQL 只认一种结构，新增数据源只需写一个 adapter。datetime 对象留给展示层，存储和计算用整数。
+
+2. 为什么落 Parquet 不落 CSV？
+
+   **答案**：列式存储同列同类型、数值相近，压缩率高（行情数据常到 1/10）；分析只读用到的列——算 spread 只扫 bid_px/ask_px 两列，CSV 却要解析每行全部字段；schema 随文件自带，字段类型不用下游猜。CSV 是无类型行式文本，SQLite 是行式 OLTP，都不适合分析扫描。
+
 3. DuckDB 的 `read_parquet()` 为什么不搬数据就能分析？
+
+   **答案**：DuckDB 是进程内列式分析引擎，它的扫描层原生理解 Parquet 这种列式文件格式——文件本身就是它的"存储"。存储和计算分离、把计算推到存储旁边，省去 ETL 入库步骤，这正是现代轻量 data warehouse 的典型形态（同思路的还有 ClickHouse 读 Parquet、Trino 等）。
+
 4. async iterator 作为行情源接口的意义：sim 与 live 可互换，测试不用碰网络。
+
+   **答案**：sim 和 live 都实现成 `AsyncIterator[Quote]`，消费端 `async for` 不关心背后是谁。好处：测试与离线开发跑 sim，不碰网络；切真实行情只改一个参数；以后加 OKX 等新源，实现同一接口即可。这就是"面向接口编程"在 Python async 协议里的落地，和 Rust 里用 trait 定义数据源接口是同一个思想。
 
 ## 扩展 TODO
 
