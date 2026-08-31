@@ -65,3 +65,86 @@ def report(parquet_path: str | Path) -> str:
             f"  {m['minute']}  ticks={m['ticks']}  spread={m['avg_spread']}  depth={m['avg_depth']}"
         )
     return "\n".join(lines)
+
+
+KLINE_MONTH_SQL = """
+select
+    count(*)                                     as n_klines,
+    to_timestamp(min(open_ts_ns) / 1e9)          as first_ts,
+    to_timestamp(max(open_ts_ns) / 1e9)          as last_ts,
+    round(min(low), 2)                           as month_low,
+    round(max(high), 2)                          as month_high,
+    round(sum(volume), 2)                        as total_vol,
+    round(sum(quote_volume), 2)                  as total_quote_vol
+from read_parquet(?)
+"""
+
+KLINE_OPEN_CLOSE_SQL = """
+select
+    (select open from read_parquet(?) order by open_ts_ns limit 1)  as first_open,
+    (select close from read_parquet(?) order by open_ts_ns desc limit 1) as last_close
+"""
+
+KLINE_DAILY_SQL = """
+select
+    date_trunc('day', to_timestamp(open_ts_ns / 1e9))              as day,
+    round(first(open  order by open_ts_ns), 2)                     as open,
+    round(max(high), 2)                                            as high,
+    round(min(low), 2)                                             as low,
+    round(last(close order by open_ts_ns), 2)                      as close,
+    round(sum(volume), 2)                                          as volume
+from read_parquet(?)
+group by 1
+order by 1
+"""
+
+
+def analyze_klines(parquet_path: str | Path) -> dict:
+    con = duckdb.connect()
+    try:
+        m = con.execute(KLINE_MONTH_SQL, [str(parquet_path)]).fetchone()
+        oc = con.execute(KLINE_OPEN_CLOSE_SQL, [str(parquet_path)] * 2).fetchone()
+        first_open, last_close = oc[0], oc[1]
+        ret = None if (first_open is None or first_open == 0) else (last_close / first_open - 1)
+        summary = {
+            "n_klines": m[0],
+            "first_ts": str(m[1]),
+            "last_ts": str(m[2]),
+            "month_low": m[3],
+            "month_high": m[4],
+            "first_open": first_open,
+            "last_close": last_close,
+            "return_pct": None if ret is None else round(ret * 100, 2),
+            "total_vol": m[5],
+            "total_quote_vol": m[6],
+        }
+        daily = [
+            {"day": str(d), "open": o, "high": h, "low": l, "close": c, "volume": v}
+            for (d, o, h, l, c, v) in con.execute(KLINE_DAILY_SQL, [str(parquet_path)]).fetchall()
+        ]
+    finally:
+        con.close()
+    return {"summary": summary, "daily": daily}
+
+
+def report_klines(parquet_path: str | Path) -> str:
+    res = analyze_klines(parquet_path)
+    s = res["summary"]
+    p = Path(parquet_path).name
+    lines = [f"== {p} =="]
+    lines.append(
+        f"{s['n_klines']} klines  {s['first_ts']} -> {s['last_ts']}"
+    )
+    lines.append(
+        f"month: open={s['first_open']} close={s['last_close']} "
+        f"ret={s['return_pct']}%  high={s['month_high']} low={s['month_low']}"
+    )
+    lines.append(
+        f"volume={s['total_vol']} SOL  quote={s['total_quote_vol']:.0f} USDT"
+    )
+    for d in res["daily"]:
+        lines.append(
+            f"  {d['day']}  O={d['open']} H={d['high']} L={d['low']} C={d['close']}  "
+            f"vol={d['volume']}  chg={(d['close']/d['open']-1)*100:+.2f}%"
+        )
+    return "\n".join(lines)
