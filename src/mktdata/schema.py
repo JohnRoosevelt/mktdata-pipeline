@@ -19,7 +19,7 @@ class Quote:
     ask_qty: float
     source: str
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
@@ -42,5 +42,5 @@ class Kline:
     trades: int
     source: str
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)

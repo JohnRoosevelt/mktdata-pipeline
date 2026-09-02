@@ -5,6 +5,7 @@
 """
 
 from pathlib import Path
+from typing import Any, cast
 
 import duckdb
 
@@ -31,10 +32,12 @@ order by 1
 """
 
 
-def analyze(parquet_path: str | Path) -> dict:
+def analyze(parquet_path: str | Path) -> dict[str, Any]:
     con = duckdb.connect()
     try:
-        row = con.execute(SUMMARY_SQL, [str(parquet_path)]).fetchone()
+        row = cast(
+            "tuple[Any, ...]", con.execute(SUMMARY_SQL, [str(parquet_path)]).fetchone()
+        )
         summary = {
             "n_ticks": row[0],
             "avg_spread": row[1],
@@ -44,7 +47,9 @@ def analyze(parquet_path: str | Path) -> dict:
         }
         per_minute = [
             {"minute": str(m), "ticks": t, "avg_spread": s, "avg_depth": d}
-            for (m, t, s, d) in con.execute(PER_MINUTE_SQL, [str(parquet_path)]).fetchall()
+            for (m, t, s, d) in con.execute(
+                PER_MINUTE_SQL, [str(parquet_path)]
+            ).fetchall()
         ]
     finally:
         con.close()
@@ -62,7 +67,8 @@ def report(parquet_path: str | Path) -> str:
     )
     for m in res["per_minute"]:
         lines.append(
-            f"  {m['minute']}  ticks={m['ticks']}  spread={m['avg_spread']}  depth={m['avg_depth']}"
+            f"  {m['minute']}  ticks={m['ticks']}  "
+            f"spread={m['avg_spread']}  depth={m['avg_depth']}"
         )
     return "\n".join(lines)
 
@@ -99,13 +105,23 @@ order by 1
 """
 
 
-def analyze_klines(parquet_path: str | Path) -> dict:
+def analyze_klines(parquet_path: str | Path) -> dict[str, Any]:
     con = duckdb.connect()
     try:
-        m = con.execute(KLINE_MONTH_SQL, [str(parquet_path)]).fetchone()
-        oc = con.execute(KLINE_OPEN_CLOSE_SQL, [str(parquet_path)] * 2).fetchone()
+        m = cast(
+            "tuple[Any, ...]",
+            con.execute(KLINE_MONTH_SQL, [str(parquet_path)]).fetchone(),
+        )
+        oc = cast(
+            "tuple[Any, ...]",
+            con.execute(KLINE_OPEN_CLOSE_SQL, [str(parquet_path)] * 2).fetchone(),
+        )
         first_open, last_close = oc[0], oc[1]
-        ret = None if (first_open is None or first_open == 0) else (last_close / first_open - 1)
+        ret = (
+            None
+            if first_open is None or first_open == 0
+            else last_close / first_open - 1
+        )
         summary = {
             "n_klines": m[0],
             "first_ts": str(m[1]),
@@ -119,8 +135,17 @@ def analyze_klines(parquet_path: str | Path) -> dict:
             "total_quote_vol": m[6],
         }
         daily = [
-            {"day": str(d), "open": o, "high": h, "low": l, "close": c, "volume": v}
-            for (d, o, h, l, c, v) in con.execute(KLINE_DAILY_SQL, [str(parquet_path)]).fetchall()
+            {
+                "day": str(day),
+                "open": open_price,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": volume,
+            }
+            for (day, open_price, high, low, close, volume) in con.execute(
+                KLINE_DAILY_SQL, [str(parquet_path)]
+            ).fetchall()
         ]
     finally:
         con.close()

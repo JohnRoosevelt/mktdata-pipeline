@@ -19,6 +19,15 @@ def test_project_declares_mktdata_console_script():
     assert data["project"]["scripts"]["mktdata"] == "mktdata.cli:main"
 
 
+def test_quality_workflow_targets_supported_python_versions():
+    workflow = Path(".github/workflows/quality.yml").read_text()
+    assert '"3.10"' in workflow
+    assert '"3.12"' in workflow
+    assert "uv run pytest" in workflow
+    assert "uv run ruff check ." in workflow
+    assert "uv run mypy src" in workflow
+
+
 def test_sim_to_parquet_to_analysis(tmp_path):
     quotes = asyncio.run(_collect(sim_stream("TEST", 500)))
     assert len(quotes) == 500
