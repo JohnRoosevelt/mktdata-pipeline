@@ -3,10 +3,20 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
+    import tomli as tomllib
+
 from mktdata.analyze import analyze
 from mktdata.cli import main
 from mktdata.sink import ParquetBatchWriter, write_parquet
 from mktdata.sources import sim_stream
+
+
+def test_project_declares_mktdata_console_script():
+    data = tomllib.loads(Path("pyproject.toml").read_text())
+    assert data["project"]["scripts"]["mktdata"] == "mktdata.cli:main"
 
 
 def test_sim_to_parquet_to_analysis(tmp_path):
