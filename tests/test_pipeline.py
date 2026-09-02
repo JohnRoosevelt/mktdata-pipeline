@@ -1,6 +1,10 @@
 import asyncio
+import subprocess
+import sys
+from pathlib import Path
 
 from mktdata.analyze import analyze
+from mktdata.cli import main
 from mktdata.sink import ParquetBatchWriter, write_parquet
 from mktdata.sources import sim_stream
 
@@ -31,6 +35,49 @@ def test_batch_writer_flushes(tmp_path):
         res = analyze(f)
         total_rows += res["summary"]["n_ticks"]
     assert total_rows == 12
+
+
+def test_cli_sim_writes_parquet(tmp_path, monkeypatch):
+    out = tmp_path / "q.parquet"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["mktdata", "--mode", "sim", "--n", "3", "--out", str(out)],
+    )
+    main()
+    assert out.exists()
+
+
+def test_module_launcher_exports_main():
+    from mktdata.__main__ import main as module_main
+
+    assert module_main is main
+
+
+def test_module_launcher_help():
+    result = subprocess.run(
+        [sys.executable, "-m", "mktdata", "--help"],
+        cwd=Path(__file__).parents[1],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "mktdata pipeline" in result.stdout
+
+
+def test_script_launcher_help():
+    result = subprocess.run(
+        [sys.executable, "scripts/run_pipeline.py", "--help"],
+        cwd=Path(__file__).parents[1],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "mktdata pipeline" in result.stdout
 
 
 async def _collect(source):
