@@ -10,10 +10,9 @@
 
 import logging
 from pathlib import Path
-from typing import Iterator
 
-import pyarrow as pa
-import pyarrow.parquet as pq
+import pyarrow as pa  # type: ignore[import-untyped]
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 from mktdata.schema import Kline, Quote
 
@@ -51,7 +50,7 @@ def write_parquet(quotes: list[Quote], path: str | Path) -> Path:
     """一次性写入多条 Quote（兼容旧接口，内部自动 schema 对齐）。"""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    cols: dict[str, list] = {name: [] for name in SCHEMA.names}
+    cols: dict[str, list[object]] = {name: [] for name in SCHEMA.names}
     for q in quotes:
         d = q.to_dict()
         for name in SCHEMA.names:
@@ -65,7 +64,7 @@ def write_klines(klines: list[Kline], path: str | Path) -> Path:
     """一次性写入多条 Kline。"""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    cols: dict[str, list] = {name: [] for name in KLINE_SCHEMA.names}
+    cols: dict[str, list[object]] = {name: [] for name in KLINE_SCHEMA.names}
     for k in klines:
         d = k.to_dict()
         for name in KLINE_SCHEMA.names:
@@ -111,7 +110,7 @@ class ParquetBatchWriter:
         if not self._buffer:
             return
         file_path = self._base_path / f"quotes_{self._file_index:03d}.parquet"
-        cols: dict[str, list] = {name: [] for name in SCHEMA.names}
+        cols: dict[str, list[object]] = {name: [] for name in SCHEMA.names}
         for q in self._buffer:
             d = q.to_dict()
             for name in SCHEMA.names:
@@ -126,7 +125,9 @@ class ParquetBatchWriter:
     def close(self) -> None:
         """刷完剩余并关闭。"""
         self.flush()
-        logger.info("落盘完成：共 %d 条，%d 个文件", self._total_written, self._file_index)
+        logger.info(
+            "落盘完成：共 %d 条，%d 个文件", self._total_written, self._file_index
+        )
 
     def __enter__(self) -> "ParquetBatchWriter":
         return self

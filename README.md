@@ -17,24 +17,29 @@ scripts/run_pipeline.py  端到端入口
 ## 运行
 
 ```bash
-# 推荐 uv；没有 uv 就 python -m venv .venv && pip install -e .[dev]
-uv venv && uv pip install -e .[dev]
+# 推荐：uv 会按 uv.lock 同步项目和开发工具
+uv sync --all-groups
 
 # 离线模式（无网络也能跑）
-python scripts/run_pipeline.py --mode sim --n 2000
+uv run mktdata --mode sim --n 2000
 
 # 真实行情（需网络，公开频道无需 API key，带重连退避）
-python scripts/run_pipeline.py --mode live --symbol BTCUSDT --n 500
+uv run mktdata --mode live --symbol BTCUSDT --n 500
 
 # 真实行情 + 分批落盘（大流量时用，每 5000 条刷一个文件）
-python scripts/run_pipeline.py --mode live --symbol BTCUSDT --n 50000 --batch-size 5000
+uv run mktdata --mode live --symbol BTCUSDT --n 50000 --batch-size 5000
 
 # 测试
-pytest
+uv run pytest
 
 # Lint / 类型检查
-ruff check src/ tests/
-mypy src/
+uv run ruff check .
+uv run mypy src
+
+# 不使用 uv 时的 venv + pip 备用安装方式
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e . pytest ruff mypy
 ```
 
 ## 工程化要点（面试能讲清楚的）

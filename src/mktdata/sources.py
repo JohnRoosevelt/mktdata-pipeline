@@ -11,7 +11,7 @@ import json
 import logging
 import random
 import time
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import aiohttp
 
@@ -100,7 +100,9 @@ async def live_stream(symbol: str, n: int = 1000) -> AsyncIterator[Quote]:
         logger.error("重连次数耗尽，已收 %d/%d 条", received, n)
 
 
-async def kline_stream(symbol: str, n: int = 43200, interval: str = "1m") -> AsyncIterator[Kline]:
+async def kline_stream(
+    symbol: str, n: int = 43200, interval: str = "1m"
+) -> AsyncIterator[Kline]:
     """Binance 历史 K 线(走 aiohttp,拉最近 n 根)。
 
     1m K 线一个月约 43200 根。Binance 单次拉取上限 1000,
@@ -117,7 +119,11 @@ async def kline_stream(symbol: str, n: int = 43200, interval: str = "1m") -> Asy
             if end_time is not None:
                 req_params["endTime"] = end_time
 
-            async with session.get(BINANCE_KLINES_REST, params=req_params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            async with session.get(
+                BINANCE_KLINES_REST,
+                params=req_params,
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as resp:
                 rows = await resp.json()
 
             if not rows:
@@ -131,8 +137,8 @@ async def kline_stream(symbol: str, n: int = 43200, interval: str = "1m") -> Asy
             await asyncio.sleep(0)
 
 
-def _row_to_kline(row: list, symbol: str, interval: str) -> Kline:
-    """Binance kline 行 -> Kline。row: [openTime,open,high,low,close,volume,...,trades,...]"""
+def _row_to_kline(row: list[str | int | float], symbol: str, interval: str) -> Kline:
+    """Binance kline 行 -> Kline。row: [openTime, open, high, low, close, ...]。"""
     return Kline(
         open_ts_ns=int(row[0]) * 1_000_000,
         symbol=symbol,

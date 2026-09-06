@@ -8,11 +8,14 @@ dependencies = [
     "aiohttp>=3.9",
     "pyarrow>=15",
     "duckdb>=1.0",
-    "nats-py>=2.11",
+"nats-py>=2.11",
     "pytz>=2025.2",
 ]
 
-[project.optional-dependencies]
+[project.scripts]
+mktdata = "mktdata.cli:main"
+
+[dependency-groups]
 dev = ["pytest>=8", "ruff>=0.4", "mypy>=1.10"]
 
 [build-system]
