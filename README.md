@@ -3,6 +3,55 @@
 行情数据管道练习项目：采集 -> 归一化 -> Parquet 落库 -> DuckDB 分析。
 覆盖交易系统岗位 JD 里的 data pipeline 与 Data Warehouse 两个考点。
 
+## 与 Rust 风控/撮合服务联调
+
+`publisher.py` 把归一化报价转换为全整数 JSON，并发布到
+`market.quotes.<symbol>`；它与 `mini-orderbook-rs` 工作区中的 risk service
+使用同一份 wire contract。可用模拟行情在本机演示完整执行链路：
+
+```bash
+# 终端 1（在 mini-orderbook-rs/ 下）
+crates/matching-engine/.tools/nats/nats-server-v2.14.5-darwin-amd64/nats-server
+
+# 终端 2（在 mini-orderbook-rs/ 下；此值是刻意设低的演示限额）
+mkdir -p .runtime
+RISK_MAX_NOTIONAL_TICKS=10000000 RISK_OUTBOX_PATH=.runtime/risk-outbox.jsonl \
+  cargo run -p matching-engine --bin risk-service
+
+# 终端 3（在 mini-orderbook-rs/ 下）
+ENGINE_JOURNAL_PATH=.runtime/matching-journal.jsonl \
+  cargo run -p matching-engine --bin matching-service
+
+# 终端 4（mktdata-pipeline/ 下）
+uv run python scripts/e2e_demo.py
+```
+
+最后一条会发布新鲜报价和三笔确定性订单，并验证两笔放行、一笔超限拒绝，
+以及一条成交事件。实际采集也可同时落 Parquet 和发布：
+
+```bash
+uv run python scripts/run_pipeline.py --mode sim --symbol BTCUSDT --n 2000 \
+  --nats-url nats://127.0.0.1:4222 --price-scale 4 --quantity-scale 4
+```
+
+同样的 `--nats-url` 参数可用于 `--mode live`。如果不传该参数，原有的
+采集→Parquet 行为不变。
+
+演示客户端也可作为本地 soak 验收器：每轮都会重新发布报价，避免因报价过期
+掩盖服务问题；它只会在每轮三条风险结果和三条执行结果均符合预期时继续。
+
+```bash
+# 约 1 小时（7,200 轮，轮间 0.5 秒；服务启动方式同上）
+uv run python scripts/e2e_demo.py --iterations 7200 --interval-seconds 0.5
+```
+
+传入 `RISK_OUTBOX_PATH` 后，risk service 会先将每条放行命令同步写入 outbox，
+重启后从 outbox 恢复下一个执行序号并重放记录；matching service 对旧序号幂等
+忽略。传入 `ENGINE_JOURNAL_PATH` 后，matching service 也会恢复订单簿状态。
+Core NATS 的单次发布仍是 at-most-once；该 outbox 只覆盖 risk 进程重启后的
+重放。生产级投递保证仍应使用具确认、保留和监控能力的 JetStream 或等价持久
+消息系统。
+
 ## 结构
 
 ```
